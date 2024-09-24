@@ -1,0 +1,23 @@
+endpoints:
+  - name: Hello darkness my old friend
+    path: /rpc/v0
+    method: POST
+    routes:
+      - name: domain.io
+        catch:
+          host: domain.io
+        dest:
+          host: localhost
+          port: 1234
+        plugins:
+          - type: request-transformer
+            enabled: true
+            config:
+              replace:
+                headers:
+                  - name: Authorization
+                    value: "Bearer JWT"
+              add:
+                headers:
+                  - name: Custom-Header
+                    value: Hello
