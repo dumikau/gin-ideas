@@ -9,6 +9,9 @@ endpoints:
           headers:
             - name: Authorization
               value: "^.*\\S.*"
+          params:
+            - name: token
+              value: "^.*\\S.*"
         dest:
           host: localhost
           port: 1234

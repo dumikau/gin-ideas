@@ -28,7 +28,16 @@ func findRoute(ctx *gin.Context, endpoint models.Endpoint) (*models.Route, error
 				break
 			}
 		}
-		return route.CatchConfig.Host == ctx.Request.Host && headersMatch
+		paramsMatch := true
+		for _, paramCatchConfig := range route.CatchConfig.Params {
+			re := regexp.MustCompile(paramCatchConfig.Value)
+			currentParamValue := ctx.Query(paramCatchConfig.Name)
+			if !re.Match([]byte(currentParamValue)) {
+				paramsMatch = false
+				break
+			}
+		}
+		return route.CatchConfig.Host == ctx.Request.Host && headersMatch && paramsMatch
 	})
 
 	if routeIndex == -1 {

@@ -5,6 +5,11 @@ type Header struct {
 	Value string `yaml:"value"`
 }
 
+type QueryParam struct {
+	Name  string `yaml:"name"`
+	Value string `yaml:"value"`
+}
+
 type RequestTransformerConfig struct {
 	Replace struct {
 		Headers []Header `yaml:"headers"`
@@ -48,8 +53,9 @@ func (plugin *Plugin) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type Catch struct {
-	Host    string   `yaml:"host"`
-	Headers []Header `yaml:"headers"`
+	Host    string       `yaml:"host"`
+	Headers []Header     `yaml:"headers"`
+	Params  []QueryParam `yaml:"params"`
 }
 
 type Dest struct {
