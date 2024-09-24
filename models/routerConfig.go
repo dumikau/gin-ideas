@@ -77,6 +77,6 @@ type Endpoint struct {
 	Routes []Route `yaml:"routes"`
 }
 
-type EndpointsConfig struct {
+type RouterConfig struct {
 	Endpoints []Endpoint `yaml:"endpoints"`
 }

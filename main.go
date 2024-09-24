@@ -141,7 +141,7 @@ func loadRouterConfig(path string, config interface{}) error {
 }
 
 func main() {
-	var routerConfig models.EndpointsConfig
+	var routerConfig models.RouterConfig
 	loadRouterConfig("./config.yaml", &routerConfig)
 	spew.Dump((routerConfig))
 
