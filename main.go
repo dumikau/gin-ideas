@@ -67,13 +67,13 @@ func handleRequestTransformerPlugin(ctx *gin.Context, config models.RequestTrans
 func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
 	route, err := findRoute(ctx, endpoint)
 	if err != nil {
-		ctx.AbortWithStatusJSON(500, gin.H{"error": err})
+		ctx.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
 	remote, err := url.Parse("http://" + route.DestConfig.Host + ":" + strconv.FormatUint(route.DestConfig.Port, 10))
 	if err != nil {
-		ctx.AbortWithStatusJSON(500, gin.H{"error": err})
+		ctx.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -88,7 +88,8 @@ func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
 		switch plugin.Type {
 		case "request-transformer":
 			if err := handleRequestTransformerPlugin(ctx, plugin.Config.(models.RequestTransformerConfig)); err != nil {
-				panic(err)
+				ctx.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+				return
 			}
 		}
 	}
