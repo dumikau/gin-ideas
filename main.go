@@ -16,28 +16,42 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func isRequestMatchesRouteByHeaders(ctx *gin.Context, route models.Route, c chan bool) {
+	matches := true
+	for _, headerCatchConfig := range route.CatchConfig.Headers {
+		re := regexp.MustCompile(headerCatchConfig.Value)
+		currentHeaderValue := ctx.Request.Header.Get(headerCatchConfig.Name)
+		if !re.Match([]byte(currentHeaderValue)) {
+			matches = false
+			break
+		}
+	}
+	c <- matches
+}
+
+func isRequestMatchesRouteByQueryParams(ctx *gin.Context, route models.Route, c chan bool) {
+	matches := true
+	for _, paramCatchConfig := range route.CatchConfig.Params {
+		re := regexp.MustCompile(paramCatchConfig.Value)
+		currentParamValue := ctx.Query(paramCatchConfig.Name)
+		if !re.Match([]byte(currentParamValue)) {
+			matches = false
+			break
+		}
+	}
+	c <- matches
+}
+
 // Find the first route that matches the request
 func findRoute(ctx *gin.Context, endpoint models.Endpoint) (*models.Route, error) {
 	routeIndex := slices.IndexFunc(endpoint.Routes, func(route models.Route) bool {
-		headersMatch := true
-		for _, headerCatchConfig := range route.CatchConfig.Headers {
-			re := regexp.MustCompile(headerCatchConfig.Value)
-			currentHeaderValue := ctx.Request.Header.Get(headerCatchConfig.Name)
-			if !re.Match([]byte(currentHeaderValue)) {
-				headersMatch = false
-				break
-			}
-		}
-		paramsMatch := true
-		for _, paramCatchConfig := range route.CatchConfig.Params {
-			re := regexp.MustCompile(paramCatchConfig.Value)
-			currentParamValue := ctx.Query(paramCatchConfig.Name)
-			if !re.Match([]byte(currentParamValue)) {
-				paramsMatch = false
-				break
-			}
-		}
-		return route.CatchConfig.Host == ctx.Request.Host && headersMatch && paramsMatch
+		matchesRouteByHeadersChannel := make(chan bool)
+		go isRequestMatchesRouteByHeaders(ctx, route, matchesRouteByHeadersChannel)
+
+		matchesRouteByQueryParamsChannel := make(chan bool)
+		go isRequestMatchesRouteByQueryParams(ctx, route, matchesRouteByQueryParamsChannel)
+
+		return route.CatchConfig.Host == ctx.Request.Host && <-matchesRouteByHeadersChannel && <-matchesRouteByQueryParamsChannel
 	})
 
 	if routeIndex == -1 {
