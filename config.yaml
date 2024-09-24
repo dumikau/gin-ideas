@@ -6,6 +6,9 @@ endpoints:
       - name: domain.io
         catch:
           host: domain.io
+          headers:
+            - name: Authorization
+              value: "^.*\\S.*"
         dest:
           host: localhost
           port: 1234

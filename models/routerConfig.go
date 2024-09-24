@@ -48,7 +48,8 @@ func (plugin *Plugin) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type Catch struct {
-	Host string `yaml:"host"`
+	Host    string   `yaml:"host"`
+	Headers []Header `yaml:"headers"`
 }
 
 type Dest struct {

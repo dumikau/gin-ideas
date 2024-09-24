@@ -6,6 +6,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 
@@ -18,7 +19,16 @@ import (
 // Find the first route that matches the request
 func findRoute(ctx *gin.Context, endpoint models.Endpoint) (*models.Route, error) {
 	routeIndex := slices.IndexFunc(endpoint.Routes, func(route models.Route) bool {
-		return route.CatchConfig.Host == ctx.Request.Host
+		headersMatch := true
+		for _, headerCatchConfig := range route.CatchConfig.Headers {
+			re := regexp.MustCompile(headerCatchConfig.Value)
+			currentHeaderValue := ctx.Request.Header.Get(headerCatchConfig.Name)
+			if !re.Match([]byte(currentHeaderValue)) {
+				headersMatch = false
+				break
+			}
+		}
+		return route.CatchConfig.Host == ctx.Request.Host && headersMatch
 	})
 
 	if routeIndex == -1 {
