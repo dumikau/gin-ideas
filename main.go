@@ -61,18 +61,26 @@ func findRoute(ctx *gin.Context, endpoint models.Endpoint) (*models.Route, error
 	return &endpoint.Routes[routeIndex], nil
 }
 
+func replaceRequestHeaderIfExists(ctx *gin.Context, header models.Header) {
+	if currentValue := ctx.Request.Header.Get(header.Name); currentValue != "" {
+		ctx.Request.Header.Set(header.Name, header.Value)
+	}
+}
+
+func addRequestHeaderIfNotExists(ctx *gin.Context, header models.Header) {
+	if currentValue := ctx.Request.Header.Get(header.Name); currentValue == "" {
+		ctx.Request.Header.Add(header.Name, header.Value)
+	}
+}
+
 // Put plugin logic in similar functions
 func handleRequestTransformerPlugin(ctx *gin.Context, config models.RequestTransformerConfig) error {
-	for _, replaceHeaderConfig := range config.Replace.Headers {
-		if currentValue := ctx.Request.Header.Get(replaceHeaderConfig.Name); currentValue != "" {
-			ctx.Request.Header.Set(replaceHeaderConfig.Name, replaceHeaderConfig.Value)
-		}
+	for _, header := range config.Replace.Headers {
+		go replaceRequestHeaderIfExists(ctx, header)
 	}
 
-	for _, addHeaderConfig := range config.Add.Headers {
-		if currentValue := ctx.Request.Header.Get(addHeaderConfig.Name); currentValue == "" {
-			ctx.Request.Header.Add(addHeaderConfig.Name, addHeaderConfig.Value)
-		}
+	for _, header := range config.Add.Headers {
+		go addRequestHeaderIfNotExists(ctx, header)
 	}
 
 	return nil
