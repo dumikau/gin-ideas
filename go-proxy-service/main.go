@@ -2,7 +2,7 @@ package main
 
 import (
 	"errors"
-	"net"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -10,10 +10,10 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
-	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/protofire/proteus-shield/go-proxy-service-test/models"
 	"gopkg.in/yaml.v3"
 )
@@ -92,6 +92,70 @@ func isWsRequest(ctx *gin.Context) bool {
 	return ctx.GetHeader("Connection") == "Upgrade" && ctx.GetHeader("Upgrade") == "websocket"
 }
 
+type OnMessageCallback func([]byte)
+
+func forwardMessages(in *websocket.Conn, out *websocket.Conn, errorChannel chan<- bool, callback OnMessageCallback) {
+	for {
+		messageType, message, err := in.ReadMessage()
+		if err != nil {
+			log.Printf("error reading ws message: %v", err)
+			errorChannel <- true
+			return
+		}
+
+		callback(message)
+
+		if err := out.WriteMessage(messageType, message); err != nil {
+			log.Printf("error writing ws message: %v", err)
+			errorChannel <- true
+			return
+		}
+	}
+}
+
+func handleWs(ctx *gin.Context, host string, path string) {
+	remoteUrl := "ws://" + host + path
+
+	// dial upstream server and fail immediately if we can't
+	upstreamConnection, _, err := websocket.DefaultDialer.Dial(remoteUrl, nil)
+	if err != nil {
+		log.Printf("failed to dial upstream: %v", err)
+		return
+	}
+
+	// use custom upgrader to disable origin check
+	connectionUpgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	// upgrade downstream connection and fail immediately if we can't
+	downstremConnection, err := connectionUpgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	if err != nil {
+		log.Printf("failed to upgrade downstream connection: %v", err)
+		return
+	}
+
+	// error in one forwarding loop should cause both connection to close
+	errorChannel := make(chan bool)
+
+	// forward requests from the client to the upstream
+	go forwardMessages(downstremConnection, upstreamConnection, errorChannel, func(b []byte) {
+		log.Printf("got message from the client:")
+	})
+
+	// forward responses from the upstream to the client
+	go forwardMessages(upstreamConnection, downstremConnection, errorChannel, func(b []byte) {
+		log.Printf("got message from the upstream")
+	})
+
+	if err := <-errorChannel; err {
+		upstreamConnection.Close()
+		downstremConnection.Close()
+	}
+}
+
 func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
 	route, err := findRoute(ctx, endpoint)
 	if err != nil {
@@ -139,30 +203,19 @@ func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
 		destMethod = route.DestConfig.Method
 	}
 
-	director := func(r *http.Request) {
-		r.Method = destMethod
-		r.Header = ctx.Request.Header
-		r.Host = remote.Host
-		r.URL.Scheme = remote.Scheme
-		r.URL.Host = remote.Host
-		r.URL.Path = destUrlPath
-	}
-
 	// run proxy depending on the protocol
 	if isWsRequest(ctx) {
-		transport := &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			Dial: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).Dial,
-		}
-
-		proxy := &httputil.ReverseProxy{Director: director, Transport: transport}
-		proxy.ServeHTTP(ctx.Writer, ctx.Request)
+		handleWs(ctx, remote.Host, destUrlPath)
 	} else {
 		proxy := httputil.NewSingleHostReverseProxy(remote)
-		proxy.Director = director
+		proxy.Director = func(r *http.Request) {
+			r.Method = destMethod
+			r.Header = ctx.Request.Header
+			r.Host = remote.Host
+			r.URL.Scheme = remote.Scheme
+			r.URL.Host = remote.Host
+			r.URL.Path = destUrlPath
+		}
 		proxy.ServeHTTP(ctx.Writer, ctx.Request)
 	}
 }
