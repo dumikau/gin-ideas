@@ -1,5 +1,7 @@
 package models
 
+import "github.com/creasty/defaults"
+
 type Header struct {
 	Name  string `yaml:"name"`
 	Value string `yaml:"value"`
@@ -20,23 +22,23 @@ type RequestTransformerConfig struct {
 }
 
 type Plugin struct {
-	Enabled bool        `yaml:"enabled"`
-	Type    string      `yaml:"type"`
-	Config  interface{} `yaml:"config"`
+	Disabled bool
+	Type     string
+	Config   interface{}
 }
 
 // Unmarshal plugin config to respective type
 func (plugin *Plugin) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var t struct {
-		Enabled bool   `yaml:"enabled"`
-		Type    string `yaml:"type"`
+		Disabled bool   `yaml:"disabled"`
+		Type     string `yaml:"type"`
 	}
 
 	if err := unmarshal(&t); err != nil {
 		panic(err)
 	}
 
-	plugin.Enabled = t.Enabled
+	plugin.Disabled = t.Disabled
 	plugin.Type = t.Type
 
 	switch t.Type {
@@ -59,8 +61,11 @@ type Catch struct {
 }
 
 type Dest struct {
-	Host string `yaml:"host"`
-	Port uint64 `yaml:"port"`
+	Host             string `yaml:"host"`
+	Port             uint64 `yaml:"port"`
+	RemovePathPrefix bool   `yaml:"remove_path_prefix"`
+	Path             string `yaml:"path"`
+	Method           string `yaml:"method"`
 }
 
 type Route struct {
@@ -71,10 +76,22 @@ type Route struct {
 }
 
 type Endpoint struct {
-	Name   string  `yaml:"name"`
-	Method string  `yaml:"method"`
-	Path   string  `yaml:"path"`
-	Routes []Route `yaml:"routes"`
+	Name     string  `yaml:"name"`
+	Method   string  `yaml:"method"`
+	Path     string  `yaml:"path"`
+	PathMode string  `yaml:"path_mode" default:"Exact"`
+	Routes   []Route `yaml:"routes"`
+}
+
+func (endpoint *Endpoint) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	defaults.Set(endpoint)
+
+	type plain Endpoint
+	if err := unmarshal((*plain)(endpoint)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type RouterConfig struct {

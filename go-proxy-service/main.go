@@ -103,7 +103,7 @@ func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
 	for _, plugin := range route.Plugins {
 		// We can disable plugins in config without removing them.
 		// It's useful for testing and stuff
-		if !plugin.Enabled {
+		if plugin.Disabled {
 			continue
 		}
 
@@ -116,13 +116,31 @@ func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
 		}
 	}
 
+	destUrlPath := endpoint.Path + ctx.Param("proxyPath")
+	// remove path prefix if path_mode is Prefix
+	// and remove_path_prefix is enabled for the route
+	if endpoint.PathMode == "Prefix" && route.DestConfig.RemovePathPrefix {
+		destUrlPath = ctx.Param("proxyPath")
+	}
+	// replace path if dest.path is set
+	if route.DestConfig.Path != "" {
+		destUrlPath = route.DestConfig.Path
+	}
+
+	destMethod := ctx.Request.Method
+	// replace method if dest.method is set
+	if route.DestConfig.Method != "" {
+		destMethod = route.DestConfig.Method
+	}
+
 	proxy := httputil.NewSingleHostReverseProxy(remote)
 	proxy.Director = func(r *http.Request) {
+		r.Method = destMethod
 		r.Header = ctx.Request.Header
 		r.Host = remote.Host
 		r.URL.Scheme = remote.Scheme
 		r.URL.Host = remote.Host
-		r.URL.Path = endpoint.Path + ctx.Param("proxyPath")
+		r.URL.Path = destUrlPath
 	}
 
 	proxy.ServeHTTP(ctx.Writer, ctx.Request)
@@ -155,13 +173,19 @@ func main() {
 
 	router := gin.Default()
 	for _, endpoint := range routerConfig.Endpoints {
+		// handle prefix endpoint paths
+		endpointPath := endpoint.Path
+		if endpoint.PathMode == "Prefix" {
+			endpointPath = endpointPath + "/*proxyPath"
+		}
+
 		switch endpoint.Method {
 		case "POST":
-			router.POST(endpoint.Path, proxy(endpoint))
+			router.POST(endpointPath, proxy(endpoint))
 		case "GET":
-			router.GET(endpoint.Path, proxy(endpoint))
+			router.GET(endpointPath, proxy(endpoint))
 		case "ANY":
-			router.Any(endpoint.Path, proxy(endpoint))
+			router.Any(endpointPath, proxy(endpoint))
 		}
 	}
 	router.Run()

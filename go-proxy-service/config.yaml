@@ -28,8 +28,9 @@ endpoints:
                   - name: Custom-Header
                     value: Hello
   - name: Test Graph endpoint
-    path: /subgraphs
     method: ANY
+    path: /subgraphs
+    path_mode: Prefix
     routes:
       - name: Mainnet TheGraph
         catch:
@@ -37,4 +38,6 @@ endpoints:
         dest:
           host: localhost
           port: 1234
+          path: /heyyy
+          method: GET
         plugins: []
