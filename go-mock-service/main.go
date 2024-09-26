@@ -10,6 +10,7 @@ func main() {
 			"scheme": ctx.Request.URL.Scheme,
 			"host":   ctx.Request.URL.Host,
 			"path":   ctx.Request.URL.Path,
+			"method": ctx.Request.Method,
 		})
 	})
 
