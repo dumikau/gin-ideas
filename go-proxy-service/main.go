@@ -160,6 +160,8 @@ func main() {
 			router.POST(endpoint.Path, proxy(endpoint))
 		case "GET":
 			router.GET(endpoint.Path, proxy(endpoint))
+		case "ANY":
+			router.Any(endpoint.Path, proxy(endpoint))
 		}
 	}
 	router.Run()

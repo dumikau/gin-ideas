@@ -27,3 +27,14 @@ endpoints:
                 headers:
                   - name: Custom-Header
                     value: Hello
+  - name: Test Graph endpoint
+    path: /subgraphs
+    method: ANY
+    routes:
+      - name: Mainnet TheGraph
+        catch:
+          host: mainnet.thegraph.node.glif.io
+        dest:
+          host: localhost
+          port: 1234
+        plugins: []
