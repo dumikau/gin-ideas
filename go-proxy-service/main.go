@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -95,34 +94,23 @@ func isWsRequest(ctx *gin.Context) bool {
 
 type OnMessageCallback func([]byte)
 
-func forwardMessages(in *websocket.Conn, out *websocket.Conn, ctx context.Context, cancel context.CancelFunc, callback OnMessageCallback) {
+func forwardMessages(in *websocket.Conn, out *websocket.Conn, callback OnMessageCallback) {
 	// close all connections when the goroutine stops
 	defer func() {
 		in.Close()
 		out.Close()
 	}()
 
-	// stop if context says the other loop is canceeled
-	select {
-	case <-ctx.Done():
-		return
-	// the default option is here to avoid blocking
-	default:
-	}
-
 	for {
 		messageType, message, err := in.ReadMessage()
 		if err != nil {
-			log.Printf("error reading ws message: %v", err)
-			cancel()
 			return
 		}
 
 		callback(message)
 
 		if err := out.WriteMessage(messageType, message); err != nil {
-			log.Printf("error writing ws message: %v", err)
-			cancel()
+			log.Printf("error writing message in loop %s -> %s: %v", in.LocalAddr(), out.LocalAddr(), err)
 			return
 		}
 	}
@@ -155,16 +143,13 @@ func handleWs(ctx *gin.Context, host string, path string) {
 		return
 	}
 
-	// context for goroutines so if one stops the other one stops as well
-	handlerContext, cancel := context.WithCancel(context.Background())
-
 	// forward requests from the client to the upstream
-	go forwardMessages(downstremConnection, upstreamConnection, handlerContext, cancel, func(b []byte) {
+	go forwardMessages(downstremConnection, upstreamConnection, func(b []byte) {
 		log.Printf("got message from the client:")
 	})
 
 	// forward responses from the upstream to the client
-	go forwardMessages(upstreamConnection, downstremConnection, handlerContext, cancel, func(b []byte) {
+	go forwardMessages(upstreamConnection, downstremConnection, func(b []byte) {
 		log.Printf("got message from the upstream")
 	})
 }
