@@ -34,10 +34,9 @@ endpoints:
     routes:
       - name: Mainnet TheGraph
         catch:
-          host: mainnet.thegraph.node.glif.io
+          host: localhost:8080
         dest:
           host: localhost
           port: 1234
-          path: /heyyy
-          method: GET
+          path: /rpc/v0
         plugins: []

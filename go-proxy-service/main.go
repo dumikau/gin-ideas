@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gin-gonic/gin"
@@ -86,6 +88,10 @@ func handleRequestTransformerPlugin(ctx *gin.Context, config models.RequestTrans
 	return nil
 }
 
+func isWsRequest(ctx *gin.Context) bool {
+	return ctx.GetHeader("Connection") == "Upgrade" && ctx.GetHeader("Upgrade") == "websocket"
+}
+
 func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
 	route, err := findRoute(ctx, endpoint)
 	if err != nil {
@@ -133,8 +139,7 @@ func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
 		destMethod = route.DestConfig.Method
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(remote)
-	proxy.Director = func(r *http.Request) {
+	director := func(r *http.Request) {
 		r.Method = destMethod
 		r.Header = ctx.Request.Header
 		r.Host = remote.Host
@@ -143,7 +148,23 @@ func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
 		r.URL.Path = destUrlPath
 	}
 
-	proxy.ServeHTTP(ctx.Writer, ctx.Request)
+	// run proxy depending on the protocol
+	if isWsRequest(ctx) {
+		transport := &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			Dial: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).Dial,
+		}
+
+		proxy := &httputil.ReverseProxy{Director: director, Transport: transport}
+		proxy.ServeHTTP(ctx.Writer, ctx.Request)
+	} else {
+		proxy := httputil.NewSingleHostReverseProxy(remote)
+		proxy.Director = director
+		proxy.ServeHTTP(ctx.Writer, ctx.Request)
+	}
 }
 
 // This is essentially a handler chooser
