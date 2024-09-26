@@ -64,13 +64,13 @@ func findRoute(ctx *gin.Context, endpoint models.Endpoint) (*models.Route, error
 }
 
 func replaceRequestHeaderIfExists(ctx *gin.Context, header models.Header) {
-	if currentValue := ctx.Request.Header.Get(header.Name); currentValue != "" {
+	if currentValue := ctx.GetHeader(header.Name); currentValue != "" {
 		ctx.Request.Header.Set(header.Name, header.Value)
 	}
 }
 
 func addRequestHeaderIfNotExists(ctx *gin.Context, header models.Header) {
-	if currentValue := ctx.Request.Header.Get(header.Name); currentValue == "" {
+	if currentValue := ctx.GetHeader(header.Name); currentValue == "" {
 		ctx.Request.Header.Add(header.Name, header.Value)
 	}
 }
