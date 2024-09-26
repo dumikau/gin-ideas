@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -94,12 +95,26 @@ func isWsRequest(ctx *gin.Context) bool {
 
 type OnMessageCallback func([]byte)
 
-func forwardMessages(in *websocket.Conn, out *websocket.Conn, errorChannel chan<- bool, callback OnMessageCallback) {
+func forwardMessages(in *websocket.Conn, out *websocket.Conn, ctx context.Context, cancel context.CancelFunc, callback OnMessageCallback) {
+	// close all connections when the goroutine stops
+	defer func() {
+		in.Close()
+		out.Close()
+	}()
+
+	// stop if context says the other loop is canceeled
+	select {
+	case <-ctx.Done():
+		return
+	// the default option is here to avoid blocking
+	default:
+	}
+
 	for {
 		messageType, message, err := in.ReadMessage()
 		if err != nil {
 			log.Printf("error reading ws message: %v", err)
-			errorChannel <- true
+			cancel()
 			return
 		}
 
@@ -107,10 +122,11 @@ func forwardMessages(in *websocket.Conn, out *websocket.Conn, errorChannel chan<
 
 		if err := out.WriteMessage(messageType, message); err != nil {
 			log.Printf("error writing ws message: %v", err)
-			errorChannel <- true
+			cancel()
 			return
 		}
 	}
+
 }
 
 func handleWs(ctx *gin.Context, host string, path string) {
@@ -134,26 +150,23 @@ func handleWs(ctx *gin.Context, host string, path string) {
 	downstremConnection, err := connectionUpgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
 		log.Printf("failed to upgrade downstream connection: %v", err)
+		// close upstream connection if the downstream failed
+		upstreamConnection.Close()
 		return
 	}
 
-	// error in one forwarding loop should cause both connection to close
-	errorChannel := make(chan bool)
+	// context for goroutines so if one stops the other one stops as well
+	handlerContext, cancel := context.WithCancel(context.Background())
 
 	// forward requests from the client to the upstream
-	go forwardMessages(downstremConnection, upstreamConnection, errorChannel, func(b []byte) {
+	go forwardMessages(downstremConnection, upstreamConnection, handlerContext, cancel, func(b []byte) {
 		log.Printf("got message from the client:")
 	})
 
 	// forward responses from the upstream to the client
-	go forwardMessages(upstreamConnection, downstremConnection, errorChannel, func(b []byte) {
+	go forwardMessages(upstreamConnection, downstremConnection, handlerContext, cancel, func(b []byte) {
 		log.Printf("got message from the upstream")
 	})
-
-	if err := <-errorChannel; err {
-		upstreamConnection.Close()
-		downstremConnection.Close()
-	}
 }
 
 func handleHttp(ctx *gin.Context, endpoint models.Endpoint) {
